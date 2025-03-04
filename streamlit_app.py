@@ -6,7 +6,7 @@ from itertools import combinations
 
 # Configuración de la página
 st.title("ANOVA con Bootstrap para Atributo por Dieta")
-st.write("Carga un archivo CSV con las columnas 'Dieta' y 'Atributo' para realizar el análisis.")
+st.write("Carga un archivo CSV con las columnas 'Dieta' (texto) y 'Atributo' (numérico) para realizar el análisis.")
 
 # Seleccionar el delimitador
 delimitador = st.radio("Selecciona el delimitador del archivo CSV", [",", ";", "|", "Tabulación"])
@@ -22,16 +22,23 @@ if uploaded_file is not None:
     # Leer el archivo CSV con el delimitador seleccionado
     df = pd.read_csv(uploaded_file, delimiter=delimitador)
     
+    # Asegurarse de que la columna 'Dieta' sea tratada como texto (string)
+    df['Dieta'] = df['Dieta'].astype(str)
+    
     # Mostrar las primeras filas del dataset
     st.write("Vista previa del dataset:")
     st.write(df.head())
     
     # Verificar que las columnas necesarias estén presentes
     if 'Dieta' not in df.columns or 'Atributo' not in df.columns:
-        st.error("El archivo CSV debe contener las columnas 'Dieta' y 'Atributo'.")
+        st.error("El archivo CSV debe contener las columnas 'Dieta' (texto) y 'Atributo' (numérico).")
     else:
         # Número de iteraciones de bootstrap
         n_iter = st.slider("Número de iteraciones de Bootstrap", min_value=1000, max_value=10000, value=5000)
+        
+        # Seleccionar el nivel de confianza
+        confianza = st.slider("Nivel de confianza (%)", min_value=80, max_value=99, value=95)
+        alpha = (100 - confianza) / 100  # Convertir a nivel de significancia
         
         # Función para calcular la diferencia de medias entre los grupos
         def diff_medias(grupos):
@@ -60,13 +67,13 @@ if uploaded_file is not None:
         # Convertir a matriz para facilitar cálculos
         bootstrap_diffs = np.array(bootstrap_diffs)
         
-        # Calcular los intervalos de confianza del 95% para las diferencias de medias
-        ci_lower = np.percentile(bootstrap_diffs, 2.5, axis=0)
-        ci_upper = np.percentile(bootstrap_diffs, 97.5, axis=0)
+        # Calcular los intervalos de confianza empíricos
+        ci_lower = np.percentile(bootstrap_diffs, (alpha / 2) * 100, axis=0)
+        ci_upper = np.percentile(bootstrap_diffs, (1 - alpha / 2) * 100, axis=0)
         
         # Mostrar los resultados
-        st.write("### Resultados del Bootstrap")
-        st.write("Intervalos de confianza del 95% para las diferencias de medias entre las dietas:")
+        st.write(f"### Resultados del Bootstrap ({confianza}% de confianza)")
+        st.write("Intervalos de confianza empíricos para las diferencias de medias entre las dietas:")
         
         # Obtener combinaciones de dietas
         dietas = df['Dieta'].unique()
@@ -84,7 +91,7 @@ if uploaded_file is not None:
             ax.axvline(ci_upper[i], color='r', linestyle='--', linewidth=1)
         ax.set_xlabel("Diferencia de medias")
         ax.set_ylabel("Frecuencia")
-        ax.set_title("Distribución de las diferencias de medias (Bootstrap)")
+        ax.set_title(f"Distribución de las diferencias de medias (Bootstrap, {confianza}% de confianza)")
         ax.legend()
         st.pyplot(fig)
 else:
