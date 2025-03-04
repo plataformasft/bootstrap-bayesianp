@@ -1,67 +1,68 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import altair as alt
-from scipy.stats import t  # Usamos scipy para el cálculo del intervalo t
+import matplotlib.pyplot as plt
+from scipy.stats import bootstrap
 
-st.title("Análisis Bootstrap y Bayesiano (Versión Simplificada)")
+# Función para realizar el análisis Bootstrap
+def bootstrap_analysis(data, n_resamples=1000):
+    def statistic(x, axis):
+        return np.mean(x, axis=axis)
+    
+    res = bootstrap((data,), statistic, n_resamples=n_resamples, vectorized=True)
+    return res
 
-st.write("Sube un CSV con las columnas: **Tanque**, **Atributo** y **Dieta**")
-uploaded_file = st.file_uploader("Cargar CSV", type=["csv"])
+# Configuración de la página
+st.title("Análisis Bootstrap de Dietas")
+st.write("Carga un archivo CSV con las columnas 'Tanque', 'Dieta' y 'Atributo' para realizar el análisis.")
+
+# Seleccionar el delimitador
+delimitador = st.radio("Selecciona el delimitador del archivo CSV", [",", ";", "|", "Tabulación"])
+
+# Convertir "Tabulación" a "\t"
+if delimitador == "Tabulación":
+    delimitador = "\t"
+
+# Cargar el archivo CSV
+uploaded_file = st.file_uploader("Sube tu archivo CSV", type=["csv"])
 
 if uploaded_file is not None:
-    # Cargar y mostrar los datos
-    df = pd.read_csv(uploaded_file)
-    st.subheader("Datos cargados")
-    st.dataframe(df)
+    # Leer el archivo CSV con el delimitador seleccionado
+    df = pd.read_csv(uploaded_file, delimiter=delimitador)
     
-    # Verificar que las columnas existan
-    if not set(["Tanque", "Atributo", "Dieta"]).issubset(df.columns):
-        st.error("El archivo debe contener las columnas: Tanque, Atributo y Dieta")
+    # Mostrar las primeras filas del dataset
+    st.write("Vista previa del dataset:")
+    st.write(df.head())
+    
+    # Verificar que las columnas necesarias estén presentes
+    if 'Tanque' not in df.columns or 'Dieta' not in df.columns or 'Atributo' not in df.columns:
+        st.error("El archivo CSV debe contener las columnas 'Tanque', 'Dieta' y 'Atributo'.")
     else:
-        # Convertir la columna Atributo a numérico (por si viene como texto)
-        df["Atributo"] = pd.to_numeric(df["Atributo"], errors="coerce")
-        df = df.dropna(subset=["Atributo"])
+        # Seleccionar la dieta para analizar
+        dietas = df['Dieta'].unique()
+        dieta_seleccionada = st.selectbox("Selecciona una dieta para analizar", dietas)
         
-        # Lista de grupos según la columna Dieta
-        diets = df["Dieta"].unique()
+        # Filtrar el dataset por la dieta seleccionada
+        df_filtrado = df[df['Dieta'] == dieta_seleccionada]
         
-        st.header("Análisis Bootstrap por grupo (Dieta)")
-        n_boot = st.slider("Número de muestras bootstrap", min_value=100, max_value=5000, value=1000, step=100)
+        # Realizar el análisis Bootstrap
+        st.write(f"Realizando análisis Bootstrap para la dieta: {dieta_seleccionada}")
+        bootstrap_result = bootstrap_analysis(df_filtrado['Atributo'].values)
         
-        for diet in diets:
-            data = df[df["Dieta"] == diet]["Atributo"].values
-            boot_means = [np.mean(np.random.choice(data, size=len(data), replace=True))
-                          for _ in range(n_boot)]
-            mean_boot = np.mean(boot_means)
-            ci_lower = np.percentile(boot_means, 2.5)
-            ci_upper = np.percentile(boot_means, 97.5)
-            st.write(f"**Dieta: {diet}** – Media Bootstrap: {mean_boot:.2f} | Intervalo 95%: [{ci_lower:.2f}, {ci_upper:.2f}]")
-            
-            # Gráfico de la distribución de las medias Bootstrap usando Altair
-            boot_df = pd.DataFrame({"Medias Bootstrap": boot_means})
-            chart = alt.Chart(boot_df).mark_bar().encode(
-                alt.X("Medias Bootstrap:Q", bin=alt.Bin(maxbins=50)),
-                y='count()'
-            ).properties(
-                title=f"Distribución Bootstrap para Dieta: {diet}"
-            )
-            st.altair_chart(chart, use_container_width=True)
+        # Mostrar los resultados
+        st.write(f"Media del atributo: {np.mean(df_filtrado['Atributo'])}")
+        st.write(f"Intervalo de confianza del 95%: {bootstrap_result.confidence_interval}")
         
-        st.header("Análisis Bayesiano Simplificado (Aproximación)")
-        st.write("Usando la media y el error estándar de cada grupo, calculamos un intervalo basado en la distribución *t* (aproximación de un intervalo de credibilidad con priors no informativos).")
+        # Graficar los resultados
+        fig, ax = plt.subplots()
+        ax.hist(bootstrap_result.bootstrap_distribution, bins=30, edgecolor='k')
+        ax.axvline(np.mean(df_filtrado['Atributo']), color='r', linestyle='dashed', linewidth=2)
+        ax.axvline(bootstrap_result.confidence_interval.low, color='g', linestyle='dashed', linewidth=2)
+        ax.axvline(bootstrap_result.confidence_interval.high, color='g', linestyle='dashed', linewidth=2)
+        ax.set_title(f"Distribución Bootstrap para la dieta {dieta_seleccionada}")
+        ax.set_xlabel("Valor del Atributo")
+        ax.set_ylabel("Frecuencia")
         
-        for diet in diets:
-            data = df[df["Dieta"] == diet]["Atributo"].values
-            n = len(data)
-            mean_val = np.mean(data)
-            std_val = np.std(data, ddof=1)
-            se = std_val / np.sqrt(n)
-            dfree = n - 1
-            t_crit = t.ppf(0.975, dfree)
-            ci_lower = mean_val - t_crit * se
-            ci_upper = mean_val + t_crit * se
-            st.write(f"**Dieta: {diet}** – Media: {mean_val:.2f} | Intervalo aproximado 95%: [{ci_lower:.2f}, {ci_upper:.2f}]")
-        
-        st.write("Nota: Esta aproximación asume un modelo normal y un prior no informativo, por lo que el intervalo se asemeja al intervalo de credibilidad bayesiano en esos casos.")
-
+        st.pyplot(fig)
+else:
+    st.write("Por favor, sube un archivo CSV para comenzar el análisis.")
