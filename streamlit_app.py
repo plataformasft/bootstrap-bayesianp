@@ -3,9 +3,11 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from itertools import combinations
+import pymc as pm
+import arviz as az
 
 # Configuración de la página
-st.title("ANOVA con Bootstrap para Atributo por Dieta")
+st.title("ANOVA con Bootstrap y Bayesiano para Atributo por Dieta")
 st.write("Carga un archivo CSV con las columnas 'Dieta' (texto) y 'Atributo' (numérico) para realizar el análisis.")
 
 # Seleccionar el delimitador
@@ -71,7 +73,7 @@ if uploaded_file is not None:
         ci_lower = np.percentile(bootstrap_diffs, (alpha / 2) * 100, axis=0)
         ci_upper = np.percentile(bootstrap_diffs, (1 - alpha / 2) * 100, axis=0)
         
-        # Mostrar los resultados
+        # Mostrar los resultados del Bootstrap
         st.write(f"### Resultados del Bootstrap ({confianza}% de confianza)")
         st.write("Intervalos de confianza empíricos para las diferencias de medias entre las dietas:")
         
@@ -83,7 +85,7 @@ if uploaded_file is not None:
             st.write(f"Diferencia entre **{dieta1}** y **{dieta2}**: ({ci_lower[i]:.3f}, {ci_upper[i]:.3f})")
         
         # Graficar las diferencias de medias
-        st.write("### Gráfico de las diferencias de medias")
+        st.write("### Gráfico de las diferencias de medias (Bootstrap)")
         fig, ax = plt.subplots(figsize=(10, 6))
         for i, (dieta1, dieta2) in enumerate(comb_dietas):
             ax.hist(bootstrap_diffs[:, i], bins=30, alpha=0.5, label=f"{dieta1} vs {dieta2}")
@@ -93,6 +95,41 @@ if uploaded_file is not None:
         ax.set_ylabel("Frecuencia")
         ax.set_title(f"Distribución de las diferencias de medias (Bootstrap, {confianza}% de confianza)")
         ax.legend()
+        st.pyplot(fig)
+        
+        # Análisis Bayesiano
+        st.write("### Análisis Bayesiano")
+        
+        # Convertir 'Dieta' a variable categórica
+        df['Dieta'] = pd.Categorical(df['Dieta'])
+        
+        # Definir el modelo Bayesiano
+        with pm.Model() as modelo_bayesiano:
+            # Priors
+            mu = pm.Normal("mu", mu=0, sigma=5, shape=len(df['Dieta'].cat.categories))
+            sigma = pm.HalfCauchy("sigma", beta=2)
+            
+            # Likelihood
+            atributo = pm.Normal(
+                "atributo",
+                mu=mu[df['Dieta'].cat.codes],
+                sigma=sigma,
+                observed=df['Atributo']
+            )
+            
+            # Muestreo
+            trace = pm.sample(2000, tune=1000, chains=4, target_accept=0.95)
+        
+        # Resumen del modelo
+        st.write("#### Resumen del modelo Bayesiano")
+        resumen = az.summary(trace, var_names=["mu"], hdi_prob=confianza/100)
+        st.write(resumen)
+        
+        # Gráfico de los intervalos de credibilidad
+        st.write("#### Intervalos de credibilidad de los efectos de las dietas")
+        fig, ax = plt.subplots(figsize=(10, 6))
+        az.plot_forest(trace, var_names=["mu"], hdi_prob=confianza/100, combined=True, ax=ax)
+        ax.set_title(f"Intervalos de credibilidad ({confianza}%) para los efectos de las dietas")
         st.pyplot(fig)
 else:
     st.write("Por favor, sube un archivo CSV para comenzar el análisis.")
