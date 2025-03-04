@@ -99,51 +99,51 @@ if uploaded_file is not None:
         
         # Análisis Bayesiano
         # Análisis Bayesiano
-st.write("### Análisis Bayesiano")
-
-# Convertir 'Dieta' a variable categórica
-df['Dieta'] = pd.Categorical(df['Dieta'])
-
-# Definir el modelo Bayesiano
-with pm.Model() as modelo_bayesiano:
-    # Priors
-    mu = pm.Normal("mu", mu=0, sigma=5, shape=len(df['Dieta'].cat.categories))
-    sigma = pm.HalfCauchy("sigma", beta=2)
-    
-    # Likelihood
-    atributo = pm.Normal(
-        "atributo",
-        mu=mu[df['Dieta'].cat.codes],
-        sigma=sigma,
-        observed=df['Atributo']
-    )
-    
-    # Muestreo
-    with st.spinner("Realizando muestreo MCMC (esto puede tomar un momento)..."):
-        trace = pm.sample(2000, tune=1000, chains=4, target_accept=0.95)
-
-# Resumen del modelo
-st.write("#### Resumen del modelo Bayesiano")
-resumen = az.summary(trace, var_names=["mu"], hdi_prob=confianza/100)
-st.write(resumen)
-
-# Gráfico de los intervalos de credibilidad
-st.write("#### Intervalos de credibilidad de los efectos de las dietas")
-fig, ax = plt.subplots(figsize=(10, 6))
-az.plot_forest(trace, var_names=["mu"], hdi_prob=confianza/100, combined=True, ax=ax)
-ax.set_title(f"Intervalos de credibilidad ({confianza}%) para los efectos de las dietas")
-ax.set_xlabel("Estimación del Efecto")
-ax.set_ylabel("Dieta")
-
-# Mostrar el gráfico en Streamlit
-st.pyplot(fig)
-
-# Explicación de los resultados
-st.write("""
-#### Interpretación de los resultados:
-- **Estimación del Efecto**: Es la media posterior del efecto de cada dieta sobre el atributo.
-- **Intervalo de credibilidad**: Representa el rango en el que se espera que esté el verdadero efecto de la dieta con un nivel de confianza del {confianza}%.
-- Si el intervalo de credibilidad no incluye el 0, sugiere que el efecto de la dieta es significativo.
-""")
+        st.write("### Análisis Bayesiano")
+        
+        # Convertir 'Dieta' a variable categórica
+        df['Dieta'] = pd.Categorical(df['Dieta'])
+        
+        # Definir el modelo Bayesiano
+        with pm.Model() as modelo_bayesiano:
+            # Priors
+            mu = pm.Normal("mu", mu=0, sigma=5, shape=len(df['Dieta'].cat.categories))
+            sigma = pm.HalfCauchy("sigma", beta=2)
+            
+            # Likelihood
+            atributo = pm.Normal(
+                "atributo",
+                mu=mu[df['Dieta'].cat.codes],
+                sigma=sigma,
+                observed=df['Atributo']
+            )
+            
+            # Muestreo
+            with st.spinner("Realizando muestreo MCMC (esto puede tomar un momento)..."):
+                trace = pm.sample(2000, tune=1000, chains=4, target_accept=0.95)
+        
+        # Resumen del modelo
+        st.write("#### Resumen del modelo Bayesiano")
+        resumen = az.summary(trace, var_names=["mu"], hdi_prob=confianza/100)
+        st.write(resumen)
+        
+        # Gráfico de los intervalos de credibilidad
+        st.write("#### Intervalos de credibilidad de los efectos de las dietas")
+        fig, ax = plt.subplots(figsize=(10, 6))
+        az.plot_forest(trace, var_names=["mu"], hdi_prob=confianza/100, combined=True, ax=ax)
+        ax.set_title(f"Intervalos de credibilidad ({confianza}%) para los efectos de las dietas")
+        ax.set_xlabel("Estimación del Efecto")
+        ax.set_ylabel("Dieta")
+        
+        # Mostrar el gráfico en Streamlit
+        st.pyplot(fig)
+        
+        # Explicación de los resultados
+        st.write("""
+        #### Interpretación de los resultados:
+        - **Estimación del Efecto**: Es la media posterior del efecto de cada dieta sobre el atributo.
+        - **Intervalo de credibilidad**: Representa el rango en el que se espera que esté el verdadero efecto de la dieta con un nivel de confianza del {confianza}%.
+        - Si el intervalo de credibilidad no incluye el 0, sugiere que el efecto de la dieta es significativo.
+        """)
 else:
     st.write("Por favor, sube un archivo CSV para comenzar el análisis.")
